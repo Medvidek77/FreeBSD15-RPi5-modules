@@ -82,8 +82,8 @@ and regulatory CLM blob are obtained at attach time through the FreeBSD
 `firmware(9)` subsystem from `/boot/firmware/cyw43455/`, so the regulatory
 blob can be swapped per-deployment without rebuilding the driver.
 
-`make install-cyw43455` copies the three firmware files into
-`/boot/firmware/cyw43455/`:
+`make install-cyw43455` downloads the three firmware files from GitHub
+(RPi-Distro/firmware-nonfree) and installs them into `/boot/firmware/cyw43455/`:
 
 ```
 brcmfmac43455-sdio.bin        # firmware binary       (required)
@@ -91,8 +91,24 @@ brcmfmac43455-sdio.txt        # NVRAM config          (required)
 brcmfmac43455-sdio.clm_blob   # regulatory CLM blob   (optional)
 ```
 
-The source directory defaults to `/home/jeremy`; override it with
-`CYW43455_FW_SRC`, e.g. `sudo make install-cyw43455 CYW43455_FW_SRC=/path/to/fw`.
+The download is handled by `tools/cyw43455_fw_fetch.sh`, which maps the
+upstream Cypress names (`cypress/cyfmac43455-sdio-standard.bin`,
+`cypress/cyfmac43455-sdio.clm_blob`) and the Pi NVRAM
+(`brcm/brcmfmac43455-sdio.txt`) onto the `brcmfmac43455-sdio.*` names the
+driver requests. Files are cached under `CYW43455_FW_CACHE` (default
+`./fw`); already-present files are not re-fetched.
+
+```bash
+make fetch-cyw43455-fw                 # pre-stage the cache (no root needed)
+sudo make install-cyw43455             # fetch (if needed) + install to /boot
+```
+
+Override the source release branch or a pre-populated cache directory, e.g.:
+
+```bash
+make fetch-cyw43455-fw CYW43455_FW_BRANCH=bookworm
+sudo make install-cyw43455 CYW43455_FW_CACHE=/path/to/fw
+```
 
 When `cyw43455` is preloaded by the boot loader (loaded before the root
 filesystem is mounted), the firmware images must be preloaded too. Add the

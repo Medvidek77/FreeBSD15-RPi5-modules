@@ -1,25 +1,50 @@
 #!/bin/sh
-# tools/cyw43455_fw_fetch.sh — download CYW43455 firmware from RPi firmware repo
+# tools/cyw43455_fw_fetch.sh — download CYW43455 firmware from GitHub
 #
-# Downloads brcmfmac43455-sdio.bin and brcmfmac43455-sdio.txt into the
-# working directory so that Makefile.cyw43455fw can embed them into the KLD.
+# Fetches the three images the cyw43455 driver loads via firmware(9) from
+# /boot/firmware/cyw43455/:
+#
+#   brcmfmac43455-sdio.bin       — ARM firmware binary (required)
+#   brcmfmac43455-sdio.txt       — NVRAM configuration  (required)
+#   brcmfmac43455-sdio.clm_blob  — regulatory CLM blob  (optional)
+#
+# The files are NOT embedded in the .ko; `make install-cyw43455` calls this
+# script to populate them, or run it standalone to pre-stage a cache.
+#
+# Source: RPi-Distro/firmware-nonfree (Debian firmware-brcm80211 packaging).
+# That repo now stores the Cypress binary and CLM blob under cypress/ with
+# "cyfmac" names (the binary split into -minimal/-standard variants) and the
+# Raspberry Pi NVRAM under brcm/.  We download them under the brcmfmac*-sdio.*
+# names the driver requests; the -standard binary is the full-feature build.
 #
 # Usage:
-#   cd ~/   # or wherever your rpi5_modules source files live
-#   sh tools/cyw43455_fw_fetch.sh
+#   sh tools/cyw43455_fw_fetch.sh [output-dir]        # default output: .
+#   CYW43455_FW_BRANCH=bookworm sh tools/cyw43455_fw_fetch.sh ./fw
+#   CYW43455_FW_FORCE=1 sh tools/cyw43455_fw_fetch.sh ./fw   # re-download
 
 set -e
 
-BASE_URL="https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/master/debian/config/brcm"
-BIN="brcmfmac43455-sdio.bin"
-TXT="brcmfmac43455-sdio.txt"
+BRANCH="${CYW43455_FW_BRANCH:-trixie}"
+BASE_URL="${CYW43455_FW_URL:-https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/${BRANCH}/debian/config/brcm80211}"
+OUTDIR="${1:-.}"
+FETCH="${FETCH:-fetch -q}"
 
-echo "Fetching ${BIN}..."
-fetch -q -o "${BIN}" "${BASE_URL}/${BIN}"
-echo "  ${BIN}: $(wc -c < ${BIN} | tr -d ' ') bytes"
+# "<install-name> <repo-relative source path>"
+MAP="brcmfmac43455-sdio.bin cypress/cyfmac43455-sdio-standard.bin
+brcmfmac43455-sdio.txt brcm/brcmfmac43455-sdio.txt
+brcmfmac43455-sdio.clm_blob cypress/cyfmac43455-sdio.clm_blob"
 
-echo "Fetching ${TXT}..."
-fetch -q -o "${TXT}" "${BASE_URL}/${TXT}"
-echo "  ${TXT}: $(wc -c < ${TXT} | tr -d ' ') bytes"
+mkdir -p "$OUTDIR"
 
-echo "Done. Run: make -f Makefile.cyw43455fw"
+echo "$MAP" | while read dst src; do
+	[ -n "$dst" ] || continue
+	if [ -f "$OUTDIR/$dst" ] && [ -z "$CYW43455_FW_FORCE" ]; then
+		echo "  $dst: cached ($(wc -c < "$OUTDIR/$dst" | tr -d ' ') bytes)"
+		continue
+	fi
+	echo "Fetching $dst <- $src"
+	$FETCH -o "$OUTDIR/$dst" "$BASE_URL/$src"
+	echo "  $dst: $(wc -c < "$OUTDIR/$dst" | tr -d ' ') bytes"
+done
+
+echo "Done. Install with: sudo make install-cyw43455"

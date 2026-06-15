@@ -60,9 +60,12 @@ CFLAGS_cyw43455=	-I/usr/src/sys/contrib/libfdt
 # cyw43455 firmware delivery: the .ko does NOT embed firmware.  Images are
 # obtained at attach time through firmware(9) from /boot/firmware/cyw43455/
 # (or preloaded from /boot/loader.conf), so the regulatory .clm_blob can be
-# swapped per-deployment without rebuilding.  install-cyw43455 deploys them.
+# swapped per-deployment without rebuilding.  They are downloaded from GitHub
+# (RPi-Distro/firmware-nonfree) into CYW43455_FW_CACHE by fetch-cyw43455-fw,
+# then deployed by install-cyw43455.  Override CYW43455_FW_CACHE to point at a
+# directory that already holds the brcmfmac43455-sdio.* files to skip fetching.
 CYW43455_FW_DIR=	/boot/firmware/cyw43455
-CYW43455_FW_SRC?=	/home/jeremy
+CYW43455_FW_CACHE?=	${.CURDIR}/fw
 CYW43455_FW_FILES=	brcmfmac43455-sdio.bin brcmfmac43455-sdio.txt \
 			brcmfmac43455-sdio.clm_blob
 
@@ -144,20 +147,22 @@ unload-${m}:
 .endfor
 
 # cyw43455: install the module, then deploy its firmware images.
-install-cyw43455:
+# Download the firmware images from GitHub into CYW43455_FW_CACHE (cached;
+# already-present files are skipped).  Runs as the invoking user — no root.
+fetch-cyw43455-fw:
+	@sh ${.CURDIR}/tools/cyw43455_fw_fetch.sh ${CYW43455_FW_CACHE}
+
+install-cyw43455: fetch-cyw43455-fw
 	@echo "==> install cyw43455"
 	@${MAKE} MODULE=cyw43455 install
 	@echo "Installing CYW43455 firmware to ${CYW43455_FW_DIR}/..."
 	@install -d -m 755 ${CYW43455_FW_DIR}
 	@for f in ${CYW43455_FW_FILES}; do \
-		if [ -f "${CYW43455_FW_SRC}/$$f" ]; then \
-			install -o root -g wheel -m 444 "${CYW43455_FW_SRC}/$$f" \
+		if [ -f "${CYW43455_FW_CACHE}/$$f" ]; then \
+			install -o root -g wheel -m 444 "${CYW43455_FW_CACHE}/$$f" \
 			    "${CYW43455_FW_DIR}/$$f" && echo "  installed $$f"; \
-		elif [ -f "./$$f" ]; then \
-			install -o root -g wheel -m 444 "./$$f" \
-			    "${CYW43455_FW_DIR}/$$f" && echo "  installed $$f (from .)"; \
 		else \
-			echo "  WARNING: $$f not found in ${CYW43455_FW_SRC}/ or ./"; \
+			echo "  WARNING: $$f missing from ${CYW43455_FW_CACHE}/"; \
 		fi; \
 	done
 
@@ -214,8 +219,11 @@ help:
 	@echo "  clean            Remove all build artifacts"
 	@echo "  clean-<module>   Clean one module"
 	@echo ""
+	@echo "Firmware (cyw43455):"
+	@echo "  fetch-cyw43455-fw  Download firmware from GitHub into ${CYW43455_FW_CACHE}"
+	@echo ""
 	@echo "Install / load (require root):"
-	@echo "  install          Install every module (cyw43455 also gets firmware)"
+	@echo "  install          Install every module (cyw43455 also fetches+installs firmware)"
 	@echo "  install-<module> Install one module"
 	@echo "  load / unload    Load/unload the runtime module set"
 	@echo "  load-<m>/unload-<m>  Load/unload one module"
@@ -235,7 +243,7 @@ help:
 	@echo "  make status           # check state"
 
 .PHONY: all install clean load unload status test test-suite dev-test \
-	stress-test help
+	stress-test help fetch-cyw43455-fw
 .for m in ${MODULES}
 .PHONY: ${m} build-${m} install-${m} clean-${m} load-${m} unload-${m}
 .endfor

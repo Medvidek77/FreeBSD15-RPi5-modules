@@ -23,6 +23,9 @@ export_syms
 machine
 .depend.*
 
+# cyw43455 firmware cache (downloaded by fetch-cyw43455-fw)
+fw/
+
 # reference docs
 *.pdf
 _reference
