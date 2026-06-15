@@ -8,8 +8,15 @@ tmp
 device_if.h
 bus_if.h
 pwmbus_if.h
+ofw_bus_if.h
+acpi_if.h
+gpio_if.h
+fdt_pinctrl_if.h
+sdio_if.h
+sdio_if.c
 opt_fdt.h
 opt_global.h
+opt_acpi.h
 
 # Build artifacts
 export_syms

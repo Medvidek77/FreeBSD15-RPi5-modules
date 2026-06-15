@@ -17,8 +17,8 @@
  * Exit criteria: plug/unplug the Ethernet cable and observe
  *   sysctl hw.rp1_eth.cfg.status changing.
  *
- * Milestone 2 will fork if_cgem.c into rp1_eth.c and bring up the full
- * network stack.  See if_gem-PLAN.md for the complete three-milestone plan.
+ * rp1_eth.c forks if_cgem.c into the full network driver; this file handles
+ * eth_cfg bring-up and PHY reset.
  *
  * References:
  *   RP-008370-DS-1 §7  — eth_cfg register map

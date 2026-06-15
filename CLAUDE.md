@@ -190,13 +190,13 @@ chmod +x rpi5_fan_control_integrated.sh
 **Manual sysctl commands:**
 ```bash
 # View all cooling fan settings
-sysctl -a hw.rpi5.cooling_fan
+sysctl -a hw.rpi5.fan
 
 # Set temperature threshold to 45°C
-sysctl hw.rpi5.cooling_fan.temp0=45000
+sysctl hw.rpi5.fan.temp0=45000
 
 # Set PWM speed (0-255)
-sysctl hw.rpi5.cooling_fan.speed0=100
+sysctl hw.rpi5.fan.speed0=100
 ```
 
 ## Architecture
@@ -214,7 +214,7 @@ sysctl hw.rpi5.cooling_fan.speed0=100
    - Raspberry Pi 5 cooling fan thermal management
    - Temperature monitoring with 1-second polling
    - 4-level fan control with hysteresis logic
-   - sysctl interface under `hw.rpi5.cooling_fan.*`
+   - sysctl interface under `hw.rpi5.fan.*`
    - Depends on bcm2712 module for hardware access
    - Automatic module dependency loading
 
@@ -249,13 +249,13 @@ Level 4: >75°C → Max speed (250 PWM, ~98%)
 ### sysctl Interface
 
 **Configurable parameters:**
-- `hw.rpi5.cooling_fan.temp{0-3}` - Temperature thresholds (milli-°C)
-- `hw.rpi5.cooling_fan.temp{0-3}_hyst` - Hysteresis values (milli-°C)
-- `hw.rpi5.cooling_fan.speed{0-3}` - PWM speeds (0-255)
+- `hw.rpi5.fan.temp{0-3}` - Temperature thresholds (milli-°C)
+- `hw.rpi5.fan.temp{0-3}_hyst` - Hysteresis values (milli-°C)
+- `hw.rpi5.fan.speed{0-3}` - PWM speeds (0-255)
 
 **Read-only status:**
-- `hw.rpi5.cooling_fan.cpu_temp` - Current CPU temperature (milli-°C)
-- `hw.rpi5.cooling_fan.current_state` - Current fan level (0-3)
+- `hw.rpi5.fan.cpu_temp` - Current CPU temperature (milli-°C)
+- `hw.rpi5.fan.current_state` - Current fan level (0-3)
 
 ## Key Files
 
@@ -263,22 +263,15 @@ Level 4: >75°C → Max speed (250 PWM, ~98%)
 - `bcm2712_var.h` - BCM2712 module header and API definitions
 - `rpi5.c` - RPi5 board-specific thermal management module
 - `rpi5_fan_control_integrated.sh` - Management script
-- `Makefile.bcm2712` - Build configuration for BCM2712 module
-- `Makefile.rpi5` - Build configuration for RPi5 module
-- `Makefile.rp1_eth` - Build configuration for RP1 Ethernet module (Milestone 1)
-- `Makefile` - Consolidated build system for all modules
+- `Makefile` - Single consolidated build system for all modules
 - `BUILDING.md` - Detailed build and installation instructions
-- `INTEGRATION_GUIDE.md` - Complete architecture and integration documentation
-- `if_gem-PLAN.md` - Plan for a future `rp1_eth` KLD that reuses
-  `sys/dev/cadence/if_cgem.c` to drive the Pi 5's on-board Cadence GEM_GXL
-  Ethernet MAC through the RP1 pcie2 outbound window. Defines three
-  milestones: (1) `eth_cfg` bring-up + link observation, (2) forked cgem
-  attached to the network stack in polled mode, (3) interrupt-driven
-  operation via a minimal `bcm2712_pcie` host-controller shim.
+- `doc/INTEGRATION_GUIDE.md` - Complete architecture and integration documentation
 
-**RP1 Ethernet source (Milestone 1):**
+**RP1 Ethernet source:**
 - `rp1_eth_var.h` - Physical addresses, eth_cfg register map, GPIO constants, softc
-- `rp1_eth_cfg.c` - Milestone 1 module: FDT walk, eth_cfg mapping, PHY reset, sysctls
+- `rp1_eth_cfg.c` - FDT walk, eth_cfg mapping, PHY reset, sysctls
+- `rp1_eth.c` - Cadence GEM network driver (forked from `if_cgem.c`); `rp1eth0`
+- `rp1_eth_hw.h` - GEM hardware register definitions
 
 **Diagnostic tools:**
 - `tools/rp1_eth_status.sh` - Snapshot of module state and eth_cfg registers

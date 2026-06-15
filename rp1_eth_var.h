@@ -22,7 +22,6 @@
  * References:
  *   RP-008370-DS-1 ch.7 — Cadence GEM_GXL 1p09 registers
  *   bcm2712_var.h        — pcie2 address derivation precedent
- *   if_gem-PLAN.md       — three-milestone design plan
  */
 
 #ifndef _RP1_ETH_VAR_H_

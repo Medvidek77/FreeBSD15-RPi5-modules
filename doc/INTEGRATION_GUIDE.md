@@ -96,20 +96,20 @@ Example: If fan is at Level 1 (enabled at 50°C), it won't drop back to Level 0 
 
 **sysctl Interface**:
 ```
-hw.rpi5.cooling_fan.temp0         - Temperature threshold L0 (mC)
-hw.rpi5.cooling_fan.temp1         - Temperature threshold L1 (mC)
-hw.rpi5.cooling_fan.temp2         - Temperature threshold L2 (mC)
-hw.rpi5.cooling_fan.temp3         - Temperature threshold L3 (mC)
-hw.rpi5.cooling_fan.temp0_hyst    - Hysteresis L0 (mC)
-hw.rpi5.cooling_fan.temp1_hyst    - Hysteresis L1 (mC)
-hw.rpi5.cooling_fan.temp2_hyst    - Hysteresis L2 (mC)
-hw.rpi5.cooling_fan.temp3_hyst    - Hysteresis L3 (mC)
-hw.rpi5.cooling_fan.speed0        - PWM speed L0 (0-255)
-hw.rpi5.cooling_fan.speed1        - PWM speed L1 (0-255)
-hw.rpi5.cooling_fan.speed2        - PWM speed L2 (0-255)
-hw.rpi5.cooling_fan.speed3        - PWM speed L3 (0-255)
-hw.rpi5.cooling_fan.cpu_temp      - Current CPU temp (read-only, mC)
-hw.rpi5.cooling_fan.current_state - Current fan level (read-only, 0-3)
+hw.rpi5.fan.temp0         - Temperature threshold L0 (mC)
+hw.rpi5.fan.temp1         - Temperature threshold L1 (mC)
+hw.rpi5.fan.temp2         - Temperature threshold L2 (mC)
+hw.rpi5.fan.temp3         - Temperature threshold L3 (mC)
+hw.rpi5.fan.temp0_hyst    - Hysteresis L0 (mC)
+hw.rpi5.fan.temp1_hyst    - Hysteresis L1 (mC)
+hw.rpi5.fan.temp2_hyst    - Hysteresis L2 (mC)
+hw.rpi5.fan.temp3_hyst    - Hysteresis L3 (mC)
+hw.rpi5.fan.speed0        - PWM speed L0 (0-255)
+hw.rpi5.fan.speed1        - PWM speed L1 (0-255)
+hw.rpi5.fan.speed2        - PWM speed L2 (0-255)
+hw.rpi5.fan.speed3        - PWM speed L3 (0-255)
+hw.rpi5.fan.cpu_temp      - Current CPU temp (read-only, mC)
+hw.rpi5.fan.current_state - Current fan level (read-only, 0-3)
 ```
 
 ## Compilation
@@ -189,44 +189,44 @@ kld_list="bcm2712 rpi5"
 ### View Current Configuration
 
 ```bash
-sysctl -a hw.rpi5.cooling_fan
+sysctl -a hw.rpi5.fan
 ```
 
 ### Aggressive Cooling (Lower Thresholds, Higher Speeds)
 
 ```bash
-sudo sysctl hw.rpi5.cooling_fan.temp0=40000
-sudo sysctl hw.rpi5.cooling_fan.temp1=50000
-sudo sysctl hw.rpi5.cooling_fan.temp2=60000
-sudo sysctl hw.rpi5.cooling_fan.temp3=70000
+sudo sysctl hw.rpi5.fan.temp0=40000
+sudo sysctl hw.rpi5.fan.temp1=50000
+sudo sysctl hw.rpi5.fan.temp2=60000
+sudo sysctl hw.rpi5.fan.temp3=70000
 
-sudo sysctl hw.rpi5.cooling_fan.speed0=150
-sudo sysctl hw.rpi5.cooling_fan.speed1=180
-sudo sysctl hw.rpi5.cooling_fan.speed2=220
-sudo sysctl hw.rpi5.cooling_fan.speed3=255
+sudo sysctl hw.rpi5.fan.speed0=150
+sudo sysctl hw.rpi5.fan.speed1=180
+sudo sysctl hw.rpi5.fan.speed2=220
+sudo sysctl hw.rpi5.fan.speed3=255
 ```
 
 ### Quiet Cooling (Higher Thresholds, Lower Speeds)
 
 ```bash
-sudo sysctl hw.rpi5.cooling_fan.temp0=60000
-sudo sysctl hw.rpi5.cooling_fan.temp1=70000
-sudo sysctl hw.rpi5.cooling_fan.temp2=80000
-sudo sysctl hw.rpi5.cooling_fan.temp3=90000
+sudo sysctl hw.rpi5.fan.temp0=60000
+sudo sysctl hw.rpi5.fan.temp1=70000
+sudo sysctl hw.rpi5.fan.temp2=80000
+sudo sysctl hw.rpi5.fan.temp3=90000
 
-sudo sysctl hw.rpi5.cooling_fan.speed0=50
-sudo sysctl hw.rpi5.cooling_fan.speed1=100
-sudo sysctl hw.rpi5.cooling_fan.speed2=150
-sudo sysctl hw.rpi5.cooling_fan.speed3=255
+sudo sysctl hw.rpi5.fan.speed0=50
+sudo sysctl hw.rpi5.fan.speed1=100
+sudo sysctl hw.rpi5.fan.speed2=150
+sudo sysctl hw.rpi5.fan.speed3=255
 ```
 
 ### Make Changes Persistent
 
 Edit `/etc/sysctl.conf`:
 ```
-hw.rpi5.cooling_fan.temp0=45000
-hw.rpi5.cooling_fan.speed0=100
-hw.rpi5.cooling_fan.temp0_hyst=5000
+hw.rpi5.fan.temp0=45000
+hw.rpi5.fan.speed0=100
+hw.rpi5.fan.temp0_hyst=5000
 ```
 
 Apply immediately:
@@ -239,7 +239,7 @@ sudo sysctl -f /etc/sysctl.conf
 ### Real-time Monitoring
 
 ```bash
-watch 'sysctl hw.rpi5.cooling_fan'
+watch 'sysctl hw.rpi5.fan'
 ```
 
 ### Log Fan Events
@@ -248,9 +248,9 @@ Create a monitoring script:
 ```bash
 #!/bin/sh
 while true; do
-    state=$(sysctl -n hw.rpi5.cooling_fan.current_state)
-    temp=$(sysctl -n hw.rpi5.cooling_fan.cpu_temp)
-    speed=$(sysctl -n hw.rpi5.cooling_fan.speed0)
+    state=$(sysctl -n hw.rpi5.fan.current_state)
+    temp=$(sysctl -n hw.rpi5.fan.cpu_temp)
+    speed=$(sysctl -n hw.rpi5.fan.speed0)
     echo "$(date): State=$state Temp=$((temp/1000))°C Speed=$speed"
     sleep 1
 done
@@ -324,8 +324,8 @@ physical address, so no device-tree node or `compatible` string is involved.
 
 ```bash
 # Verify sysctl values are readable
-sysctl hw.rpi5.cooling_fan.cpu_temp
-sysctl hw.rpi5.cooling_fan.current_state
+sysctl hw.rpi5.fan.cpu_temp
+sysctl hw.rpi5.fan.current_state
 
 # Inspect GLOBAL_CTRL / CHAN_CTRL3 / RANGE3 / DUTY3 directly
 sysctl hw.bcm2712.pwm_regs
@@ -366,7 +366,7 @@ rpi5_read_cpu_temp(uint32_t *temp)
 Increase hysteresis to prevent rapid state changes:
 
 ```bash
-sudo sysctl hw.rpi5.cooling_fan.temp0_hyst=10000  # 10°C instead of 5°C
+sudo sysctl hw.rpi5.fan.temp0_hyst=10000  # 10°C instead of 5°C
 ```
 
 ## Performance Considerations
@@ -413,7 +413,7 @@ sudo sysctl hw.rpi5.cooling_fan.temp0_hyst=10000  # 10°C instead of 5°C
 
 For issues or improvements:
 1. Check FreeBSD kernel logs: `dmesg | tail -50`
-2. Review sysctl output: `sysctl -a hw.rpi5.cooling_fan`
+2. Review sysctl output: `sysctl -a hw.rpi5.fan`
 3. Test with manual PWM commands via pwm(8) utility
 4. Consult FreeBSD device driver documentation
 

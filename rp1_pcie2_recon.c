@@ -7,8 +7,8 @@
  * rp1_pcie2_recon — Milestone 3 reconnaissance
  *
  * Maps the BCM2712 PCIe2 host controller (the one connecting BCM2712 to RP1)
- * and dumps its firmware-left state to dmesg + sysctls.  Answers the question
- * from if_gem-PLAN.md §3.1: what has the VPU firmware left us?
+ * and dumps its firmware-left state to dmesg + sysctls.  Answers the question:
+ * what has the VPU firmware left us?
  *
  * Physical address from FDT: /axi/pcie@1000120000
  *   reg = <0x10 0x120000 0x0 0x9310>
@@ -21,7 +21,6 @@
  *
  * References:
  *   drivers/pci/controller/pcie-brcmstb.c  (Linux kernel)
- *   if_gem-PLAN.md §3.1
  */
 
 #include <sys/param.h>

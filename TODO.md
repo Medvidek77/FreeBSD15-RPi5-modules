@@ -1060,7 +1060,7 @@ Optionally add `bus:txglomalign` and `bus:rxglom` IOVARs matching
 | `cyw43455_security.c` | Fork `brcmfmac/security.c`               | wsec, wpa_auth, keys, PSK      |
 | `cyw43455_var.h`      | Fork `brcmfmac/brcmfmac.h`              | Softc, bus ops, SDPCM structs  |
 | `cyw43455_cfg.h`      | Fork `brcmfmac/cfg.h`                    | Event codes, cfg structs       |
-| `Makefile.cyw43455`   | New (pattern from `Makefile.rp1_eth`)     | Build configuration            |
+| cyw43455 build        | New (later folded into consolidated `Makefile`) | Build configuration            |
 | `tools/cyw43455_*.sh` | New                                       | Diagnostic scripts             |
 
 ## sysctl interface

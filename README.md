@@ -5,10 +5,8 @@ peripheral chip). Targets FreeBSD 16-CURRENT on arm64.
 
 ## Modules
 
-The repository builds nine loadable kernel modules (`.ko`).  The default
-`make` target builds the seven in **Built by default**; the remaining two
-(`rp1_pwm`, `bcm2712_thermal`) are auxiliary/legacy and are built only
-when invoked explicitly.
+The repository builds seven loadable kernel modules (`.ko`), all built by
+the default `make` target.
 
 ### Drivers, interfaces, and dependencies
 
@@ -20,31 +18,26 @@ when invoked explicitly.
 | `rp1_eth`          | `rp1_eth_cfg.c` + `rp1_eth.c`            | none (event-driven `MOD_LOAD`) | `device_if`, `bus_if` (cfg sysctls); full `if_t` net driver — `rp1eth0` | `hw.rp1_eth.*`      | `bcm2712_pcie`                   | ✓ |
 | `bcm2712_pcie`     | `bcm2712_pcie.c`                         | `acpi`                           | `device_if` (ACPI IRQ shim — routes shared GIC SPI 229 to `rp1_eth`) | —                   | `acpi`                           | ✓ |
 | `rp1_pcie2_recon`  | `rp1_pcie2_recon.c`                      | none (event-driven `MOD_LOAD`)   | reconnaissance dump of BCM2712 PCIe2 host-controller state to dmesg + sysctl | `hw.rp1_pcie2_recon.*` | —                                | ✓ |
-| `cyw43455`         | `cyw43455.c` + `cyw43455_cfg.c`, `cyw43455_fwil.c`, `cyw43455_security.c` | `sdiob` | `device_if`, net80211 `ieee80211_*` op table; creates `wlanN` over parent `cyw434550` | `hw.cyw43455.*`     | `sdiob`, `wlan`                  | ✓ |
-| `rp1_pwm`          | `rp1_pwm_driver.c`                       | `simplebus` (FDT)                | `device_if`, `bus_if`, `pwmbus_if`         | (via `pwm(9)`)      | `pwmbus`                         | — (build via `make -f Makefile.pwm`) |
-| `bcm2712_thermal`  | `rpi5_cooling_fan_integrated.c`          | none (event-driven `MOD_LOAD`)   | legacy single-module variant combining thermal + PWM + fan policy | `hw.rpi5.cooling_fan.*` | —                                | — (build via `make -f Makefile.thermal`) |
+| `cyw43455`         | `cyw43455.c` + `cyw43455_cfg.c`, `cyw43455_fwil.c`, `cyw43455_security.c` | `sdiob` | `device_if`, net80211 `ieee80211_*` op table; creates `wlanN` over parent `cyw0` | `hw.cyw43455.*`     | `sdiob`, `wlan`                  | ✓ |
 
 ### Dependency graph
 
 ```
             ┌───────────────────────────────────────────────────┐
             │                FreeBSD kernel base                │
-            │  acpi  nexus  simplebus  pwmbus  gpiobus  sdiob  wlan
-            └───┬──────┬────────┬────────┬───────┬───────┬─────┬┘
-                │      │        │        │       │       │     │
-       ┌────────┘      │        │        │       └──┐    │     │
-       │               │        │        │          │    │     │
- bcm2712_pcie     rp1_gpio   rp1_pwm   rp1_pwm   rp1_gpio │  cyw43455
-   (acpi)        (nexus +   (simplebus)(pwmbus)  (gpiobus │  (sdiob +
-                  gpiobus                          child) │   wlan)
-                  child)                                  │
-       │                                                  │
-       │   ┌────────────── bcm2712 ◄──────── rpi5         │
-       │   │                  ▲                           │
-       └────────────────────────── rp1_eth                │
+            │      acpi   nexus   gpiobus   sdiob   wlan         │
+            └───┬───────────┬────────┬─────────┬─────────┬──────┘
+                │           │        │         │         │
+ bcm2712_pcie         rp1_gpio       │       cyw43455    │
+   (acpi)            (nexus +        │       (sdiob +    │
+                      gpiobus child) │        wlan)      │
+       │                             │                   │
+       │   ┌────────────── bcm2712 ◄─┴──── rpi5          │
+       │   │                  ▲                          │
+       └───┴──────────────────────── rp1_eth             │
                                   (depends only on bcm2712_pcie)
 
- rp1_pcie2_recon, bcm2712_thermal: standalone, no MODULE_DEPEND
+ rp1_pcie2_recon: standalone, no MODULE_DEPEND
 ```
 
 Practical loading consequences:
@@ -53,12 +46,11 @@ Practical loading consequences:
 - `kldload rp1_eth` auto-pulls `bcm2712_pcie` (which in turn pulls `acpi` if not already loaded).
 - `kldload rp1_gpio` auto-pulls `gpiobus` (and `gpioc` once a `gpiobus`
   child attaches).
-- `kldload rp1_pwm` auto-pulls `pwmbus`.
 - `kldload cyw43455` attaches on the `sdiob` bus and auto-pulls `wlan`;
-  it creates the net80211 parent `cyw434550` from which `wlanN` is
-  cloned (`ifconfig wlan0 create wlandev cyw434550`).
-- `bcm2712_pcie`, `rp1_pcie2_recon`, and `bcm2712_thermal` have no
-  module-level dependencies and load standalone.
+  it creates the net80211 parent `cyw0` from which `wlanN` is
+  cloned (`ifconfig wlan0 create wlandev cyw0`).
+- `bcm2712_pcie` and `rp1_pcie2_recon` have no module-level dependencies
+  and load standalone.
 
 > **Note:** `bcm2712` and `rpi5` deliberately avoid the FreeBSD device
 > framework (no `DRIVER_MODULE`); they attach to nothing and run
@@ -113,7 +105,7 @@ rpi5_load="YES"           # auto-loads bcm2712
 rp1_gpio_load="YES"
 bcm2712_pcie_load="YES"   # ACPI IRQ shim required by rp1_eth
 rp1_eth_load="YES"        # auto-loads bcm2712_pcie; creates rp1eth0
-cyw43455_load="YES"       # auto-loads wlan; SDIO WiFi (cyw434550)
+cyw43455_load="YES"       # auto-loads wlan; SDIO WiFi (cyw0)
 ```
 
 > **Firmware note:** `cyw43455` reads its firmware, NVRAM, and CLM blob
@@ -277,7 +269,7 @@ correct BSS; the firmware retries an initial `E_AUTH status=2`
 
 ```sh
 sudo kldload cyw43455
-sudo ifconfig wlan0 create wlandev cyw434550
+sudo ifconfig wlan0 create wlandev cyw0
 sudo ifconfig wlan0 up
 sudo wpa_supplicant -B -i wlan0 -c /path/to/wpa_supplicant.conf
 ```
@@ -321,8 +313,8 @@ for M2 (pinctrl function-select) and M4 (per-pin edge/level IRQs).
 
 `rp1_eth` is a fork of `sys/dev/cadence/if_cgem.c` adapted for the Pi 5
 GEM_GXL MAC behind the RP1 PCIe2 outbound window. Development followed
-three milestones (see `if_gem-PLAN.md`); all three are now complete and
-`rp1eth0` is the production Ethernet interface.
+three milestones; all three are now complete and `rp1eth0` is the
+production Ethernet interface.
 
 - **M1 — `rp1_eth_cfg.c`** *(complete)*: FDT walk, map `eth_cfg` (PHY
   clock-mux / reset glue), drive PHY reset GPIO, expose
@@ -458,9 +450,8 @@ DSDT override described above.
   transport, SDPCM/BCDC framing, firmware IOVAR layer, firmware load,
   net80211 glue, scanning, event handling, and WPA2 key install
 - `doc/cyw43455.md` — WiFi bring-up log; §16.8 FWSUP probe, §16.9 WPA2 resolution
-- `Makefile` — top-level build, plus `Makefile.<module>` per KMOD
-- `if_gem-PLAN.md` — design and milestone notes for the Ethernet driver
-- `INTEGRATION_GUIDE.md` — architecture and integration details
+- `Makefile` — single consolidated build for all modules
+- `doc/INTEGRATION_GUIDE.md` — architecture and integration details
 - `BUILDING.md` — detailed build/install reference
 - `tools/` — diagnostic shell scripts (see above)
 

@@ -20,7 +20,6 @@
  *   void bcm2712_pcie_deregister_rp1_intr(void)
  *
  * References:
- *   if_gem-PLAN.md §3.2
  *   sys/dev/cadence/if_cgem.c (CGEM_INT_STATUS definition)
  */
 
