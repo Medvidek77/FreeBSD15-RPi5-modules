@@ -13,14 +13,7 @@ ident		RPI5
 # Increase verbosity for thermal sensor debugging
 makeoptions	DEBUG=-g
 
-# ZFS Root Filesystem Support
-# Compiles ZFS filesystem driver directly into kernel
-# Essential for mounting zfs:pool/dataset root filesystem
-options 	ZFS
-
 # FDT Support - enabled in addition to ACPI
-# Allows bcm2712_thermal driver to probe from device tree if available
-# System will still boot with ACPI if FDT not provided
 # Note: ofwbus should auto-attach when FDT is enabled
 options 	FDT
 
@@ -30,4 +23,3 @@ options 	FDT
 
 # support for USB ethernet
 device uether
-device axe
