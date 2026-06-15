@@ -1,5 +1,0 @@
-.PATH: ${.CURDIR}
-KMOD=	bcm2712_thermal
-SRCS=	rpi5_cooling_fan_integrated.c
-
-.include <bsd.kmod.mk>

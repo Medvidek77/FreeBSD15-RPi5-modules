@@ -1,333 +1,176 @@
-# Building and Installing the RPi5 Cooling Fan Sysctl Module
+# Building and Installing the RPi5 Hardware Support Modules
 
-## System Requirements
+This repository builds a set of FreeBSD/arm64 kernel modules for the
+Raspberry Pi 5 (BCM2712 SoC + RP1 I/O controller). All modules are built
+from a single top-level `Makefile`.
 
-- **OS**: FreeBSD 15.0 or later
+## Modules
+
+| Module            | Purpose                                                        | Runtime depends on |
+|-------------------|---------------------------------------------------------------|--------------------|
+| `bcm2712`         | Common BCM2712 hardware: RP1 PWM controller, thermal sensor    | —                  |
+| `rpi5`            | Pi 5 board support: cooling-fan thermal management            | `bcm2712`          |
+| `rp1_eth`         | RP1 Gigabit Ethernet (Cadence GEM) NIC                        | `bcm2712_pcie`     |
+| `bcm2712_pcie`    | BCM2712 PCIe2 / RP1 interrupt router                          | `acpi`             |
+| `rp1_pcie2_recon` | RP1 PCIe2 reconnaissance / bring-up helper                    | —                  |
+| `rp1_gpio`        | RP1 GPIO / pinctrl controller                                 | `gpiobus`          |
+| `cyw43455`        | CYW43455 SDIO WiFi NIC                                        | `sdiob`, `wlan`, `firmware` |
+
+Runtime dependencies are resolved automatically by `kldload` via
+`MODULE_DEPEND` — e.g. loading `rpi5` pulls in `bcm2712`.
+
+## Prerequisites
+
+- **OS**: FreeBSD 15.0+ / 16.0-CURRENT on arm64 (aarch64)
 - **Hardware**: Raspberry Pi 5
-- **Kernel Sources**: Required for module compilation
-- **Build Tools**: gcc/clang, make
+- **Kernel sources**: the full tree under `/usr/src` (the build reads
+  `/usr/src/sys` for headers and generated kobj interface files). Verify:
+  ```sh
+  ls /usr/src/sys/conf/kmod.mk    # must exist
+  ```
+  If absent, install matching sources with `git`/`svnlite` or
+  `freebsd-update`, or set `SYSDIR` to point at your kernel source tree.
+- **Toolchain**: the base-system `clang` and `make` (bmake).
 
-## Checking Your FreeBSD Version
-
-```bash
-freebsd-version
-uname -a
-```
-
-## Prerequisites Installation
-
-### Install Kernel Sources
-
-If you don't have kernel sources installed:
-
-```bash
-# Using freebsd-update (easiest for pre-built systems)
-sudo freebsd-update fetch
-sudo freebsd-update install
-
-# Or using ports (if you prefer)
-cd /usr/ports/sys/freebsd-src
-sudo make install clean
-```
-
-Verify kernel sources are in place:
-```bash
-ls -la /usr/src/sys
-```
-
-## Building the Module
-
-### Method 1: Standard Build and Install
-
-```bash
-# Create a working directory
-mkdir -p ~/src/rpi5_cooling_fan
-cd ~/src/rpi5_cooling_fan
-
-# Copy the module files
-cp /path/to/rpi5_cooling_fan.c .
-cp /path/to/Makefile .
-
-# Build the module
-make
-
-# Install the module (requires root)
-sudo make install
-
-# Verify installation
-ls -la /boot/kernel/rpi5_cooling_fan.ko
-```
-
-### Method 2: Build and Load Without Installation
-
-```bash
-# Build only
-make
-
-# Load directly from build directory (for testing)
-sudo kldload ./rpi5_cooling_fan.ko
-
-# Test the sysctl interface
-sysctl hw.rpi5.cooling_fan
-
-# Unload for cleanup
-sudo kldunload rpi5_cooling_fan
-```
-
-## Module Loading
-
-### Manual Loading
-
-```bash
-# Load the module
-sudo kldload rpi5_cooling_fan
-
-# Verify it's loaded
-kldstat | grep rpi5_cooling_fan
-
-# Check sysctl interface
-sysctl -a hw.rpi5.cooling_fan
-```
-
-### Automatic Loading at Boot
-
-#### Option A: Using rc.conf
-
-Edit `/etc/rc.conf`:
-```sh
-# Add this line
-kld_list="rpi5_cooling_fan"
-```
-
-#### Option B: Using loader.conf
-
-Edit `/boot/loader.conf`:
-```sh
-# Add this line
-rpi5_cooling_fan_load="YES"
-```
-
-#### Option C: Using /etc/modules
-
-Create or edit `/etc/modules`:
-```
-rpi5_cooling_fan
-```
-
-### Verify Auto-Loading After Boot
-
-```bash
-# Check module status
-kldstat | grep rpi5_cooling_fan
-
-# Should see output showing the module is loaded
-# Example:
-# 2    1 0xffffffff84f19000  1de0   rpi5_cooling_fan.ko
-```
-
-## Testing the Module
-
-### Basic Functionality Test
-
-```bash
-# View all OIDs
-sysctl -a hw.rpi5.cooling_fan
-
-# Read a specific value
-sysctl hw.rpi5.cooling_fan.temp0
-
-# Modify a value (example: change temp0 to 45°C)
-sudo sysctl hw.rpi5.cooling_fan.temp0=45000
-
-# Verify the change
-sysctl hw.rpi5.cooling_fan.temp0
-```
-
-### Using the Control Script
-
-```bash
-# Make the script executable
-chmod +x rpi5_fan_control.sh
-
-# Show all settings
-./rpi5_fan_control.sh --show
-
-# Set aggressive cooling
-sudo ./rpi5_fan_control.sh --aggressive
-
-# Reset to defaults
-sudo ./rpi5_fan_control.sh --reset
-
-# Monitor fan state
-sudo ./rpi5_fan_control.sh --monitor
-```
-
-## Making Changes Persistent
-
-### Using sysctl.conf
-
-Edit `/etc/sysctl.conf` and add your settings:
+## Building
 
 ```sh
-# RPi5 Cooling Fan Configuration
-hw.rpi5.cooling_fan.temp0=45000
-hw.rpi5.cooling_fan.temp1=55000
-hw.rpi5.cooling_fan.temp2=65000
-hw.rpi5.cooling_fan.temp3=75000
-hw.rpi5.cooling_fan.speed0=100
-hw.rpi5.cooling_fan.speed1=150
-hw.rpi5.cooling_fan.speed2=200
-hw.rpi5.cooling_fan.speed3=255
+make                # build every module (default target)
+make cyw43455       # build a single module
+make clean          # remove all build artifacts
+make help           # list all targets
 ```
 
-Then reload:
-```bash
-sudo service sysctl restart
+Each module compiles through `bsd.kmod.mk`, so per-source header
+dependencies (e.g. `bcm2712_var.h`, `rp1_eth_hw.h`) are tracked
+automatically — editing a shared header rebuilds the affected modules on
+the next `make`.
+
+A successful `make` produces one `.ko` per module in the repository root
+(`bcm2712.ko`, `rpi5.ko`, `rp1_eth.ko`, …).
+
+## Installing and Loading
+
+```sh
+sudo make install       # install every module under /boot/modules
+sudo make install-rpi5  # install a single module
+sudo make load          # load the runtime module set
+sudo make unload        # unload (in dependency-safe order)
+make status             # show load state + sysctl interface
 ```
 
-### Verification
+`make load` loads the runtime set (`bcm2712`, `rpi5`, `rp1_eth`,
+`rp1_gpio`, `cyw43455`); `bcm2712_pcie` auto-loads as an `rp1_eth`
+dependency. `make unload` tears down leaf-first so dependants release
+before their providers.
 
-```bash
-# Check that settings are applied
-sysctl hw.rpi5.cooling_fan
+### Auto-load at boot
+
+Add to `/boot/loader.conf`:
+
 ```
+rpi5_load="YES"        # auto-loads bcm2712
+rp1_eth_load="YES"
+rp1_gpio_load="YES"
+cyw43455_load="YES"    # optional: WiFi (see firmware note below)
+```
+
+## cyw43455 Firmware
+
+The `cyw43455.ko` does **not** embed firmware. The firmware binary, NVRAM,
+and regulatory CLM blob are obtained at attach time through the FreeBSD
+`firmware(9)` subsystem from `/boot/firmware/cyw43455/`, so the regulatory
+blob can be swapped per-deployment without rebuilding the driver.
+
+`make install-cyw43455` copies the three firmware files into
+`/boot/firmware/cyw43455/`:
+
+```
+brcmfmac43455-sdio.bin        # firmware binary       (required)
+brcmfmac43455-sdio.txt        # NVRAM config          (required)
+brcmfmac43455-sdio.clm_blob   # regulatory CLM blob   (optional)
+```
+
+The source directory defaults to `/home/jeremy`; override it with
+`CYW43455_FW_SRC`, e.g. `sudo make install-cyw43455 CYW43455_FW_SRC=/path/to/fw`.
+
+When `cyw43455` is preloaded by the boot loader (loaded before the root
+filesystem is mounted), the firmware images must be preloaded too. Add the
+preload block to `/boot/loader.conf`:
+
+```
+cyw43455_load="YES"
+brcm_fw_bin_load="YES"
+brcm_fw_bin_name="/boot/firmware/cyw43455/brcmfmac43455-sdio.bin"
+brcm_fw_bin_type="firmware"
+brcm_fw_nvram_load="YES"
+brcm_fw_nvram_name="/boot/firmware/cyw43455/brcmfmac43455-sdio.txt"
+brcm_fw_nvram_type="firmware"
+brcm_fw_clm_load="YES"
+brcm_fw_clm_name="/boot/firmware/cyw43455/brcmfmac43455-sdio.clm_blob"
+brcm_fw_clm_type="firmware"
+```
+
+See `cyw43455.4` and `doc/cyw43455.md` for the full firmware-delivery
+rationale and the two delivery paths (kldload lazy-load vs loader preload).
+
+## Testing
+
+`make status` reports module load state and probes the
+`hw.rpi5.fan.*` and `hw.rp1_eth.cfg.*` sysctl trees.
+
+```sh
+sysctl hw.rpi5.fan              # cooling-fan thermal state
+sysctl hw.cyw43455              # WiFi driver state (chip id, fw version, MAC)
+sysctl hw.rp1_eth.cfg           # Ethernet config-register decode
+```
+
+The shell-driven integration suite lives in `test/` and is reachable from
+the top-level Makefile:
+
+```sh
+make test-suite     # full integration suite
+make dev-test       # quick validation
+make stress-test    # load/unload stress cycles
+```
+
+## Building Remotely (project workflow)
+
+Per `CLAUDE.md`, this repository is developed on a non-FreeBSD host and
+built/tested on the FreeBSD target `dunn`:
+
+```sh
+# edit locally, commit, then on dunn:
+ssh dunn 'cd rpi5_modules.git && git reset --hard'   # clean the worktree
+git push dunn <branch>
+ssh dunn 'cd rpi5_modules.git && make'               # build over ssh
+```
+
+Low-level operations (firmware, loader, panic capture) use the UART
+console; see `CLAUDE.md` and the `tools/` scripts.
 
 ## Troubleshooting
 
-### Module Won't Load
+**`Unable to locate the kernel source tree. Set SYSDIR to override.`**
+`/usr/src/sys` is missing or not mounted. Restore the kernel sources, or
+build with `make SYSDIR=/path/to/sys`.
 
-**Issue**: "kldload: can't load rpi5_cooling_fan.ko: No such file or directory"
+**`kldload: can't load <module>.ko: No such file or directory`**
+Build/install first (`make && sudo make install`), or load by absolute
+path: `kldload /boot/modules/<module>.ko`.
 
-**Solution**:
-1. Verify the .ko file exists: `ls -la rpi5_cooling_fan.ko`
-2. Use absolute path: `kldload /boot/kernel/rpi5_cooling_fan.ko`
-3. Rebuild if needed: `make clean && make`
+**`sysctl: unknown oid 'hw.rpi5.fan'`**
+The module isn't loaded. Check `kldstat | grep rpi5`, inspect `dmesg` for
+attach errors, and reload (`sudo make unload && sudo make load`).
 
-### Compilation Errors
-
-**Issue**: "error: undefined reference to..."
-
-**Solution**:
-1. Verify kernel sources are installed
-2. Clean rebuild: `make clean && make`
-3. Check Makefile is in the correct directory
-4. Ensure FreeBSD version matches kernel sources
-
-### Sysctl OIDs Not Available
-
-**Issue**: "sysctl: unknown oid 'hw.rpi5.cooling_fan'"
-
-**Solution**:
-1. Verify module is loaded: `kldstat | grep rpi5`
-2. Check system messages: `dmesg | tail -20`
-3. Reload module: `sudo kldunload rpi5_cooling_fan && sudo kldload rpi5_cooling_fan`
-
-## Performance and Debugging
-
-### Enable Debug Output
-
-Build with debug symbols:
-```bash
-make DEBUG_FLAGS="-g"
-```
-
-### Monitor Kernel Messages
-
-```bash
-# Watch kernel messages in real-time
-tail -f /var/log/messages
-
-# Or use dmesg
-dmesg | tail -20
-```
-
-### Check Module Information
-
-```bash
-# Show module details
-kldstat -v | grep -A 20 rpi5_cooling_fan
-
-# Show all loaded modules
-kldstat
-```
-
-## Cleaning Up
-
-### Remove Module Binary
-
-```bash
-sudo rm /boot/kernel/rpi5_cooling_fan.ko
-```
-
-### Unload from Running System
-
-```bash
-sudo kldunload rpi5_cooling_fan
-```
-
-### Clean Build Artifacts
-
-```bash
-cd ~/src/rpi5_cooling_fan
-make clean
-```
-
-## Advanced: Customizing the Module
-
-### Source Code Modifications
-
-Edit `rpi5_cooling_fan.c` to modify:
-- Default temperature thresholds
-- Default PWM speeds
-- Hysteresis values
-- Validation ranges
-
-### Recompilation After Changes
-
-```bash
-# Clean previous build
-make clean
-
-# Rebuild
-make
-
-# Reinstall
-sudo make install
-
-# Reload module
-sudo kldunload rpi5_cooling_fan  # if loaded
-sudo kldload rpi5_cooling_fan
-```
-
-## Integration with Other Tools
-
-### Integration with thermal-agent (if available)
-
-Create a wrapper script that reads sysctl values and makes decisions based on actual hardware temperature.
-
-### Integration with Monitoring Tools
-
-Example with `systat`:
-```bash
-# Monitor in syscall view (shows system activity)
-systat -syscall
-
-# Then in another terminal
-watch 'sysctl hw.rpi5.cooling_fan'
-```
+**cyw43455 panics or fails to find firmware at boot**
+Ensure the firmware files exist in `/boot/firmware/cyw43455/` and, for the
+boot-preload path, that the `brcm_fw_*` preload block is present in
+`/boot/loader.conf`. See `cyw43455.4` DIAGNOSTICS.
 
 ## References
 
-- FreeBSD Handbook: https://docs.freebsd.org/
-- FreeBSD Kernel Module Programming: https://docs.freebsd.org/doc/en_US.ISO8859-1/books/arch/index.html
-- sysctl(3) man page: `man 3 sysctl`
-- sysctl(8) man page: `man 8 sysctl`
-- Device tree documentation for Raspberry Pi 5
-
-## Support
-
-For issues or questions:
-1. Check the README.md for usage examples
-2. Review FreeBSD documentation
-3. Examine kernel messages: `dmesg`
-4. Verify module is compatible with your FreeBSD version
+- `INTEGRATION_GUIDE.md` — architecture and integration details
+- `doc/` — per-driver debugging and development notes
+- `cyw43455.4` — WiFi driver man page
+- FreeBSD Architecture Handbook (kernel modules): <https://docs.freebsd.org/>
