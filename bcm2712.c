@@ -491,6 +491,21 @@ bcm2712_modevent(module_t mod __unused, int event, void *arg __unused)
 			}
 		}
 
+		/* Enable output on GPIO45 (PWM1 fan) */
+		{
+			void *pads_map;
+			volatile uint32_t *pad_reg;
+
+			pads_map = pmap_mapdev_attr(0x1f000f8000UL, 0x1000,
+			    VM_MEMATTR_DEVICE);
+			if (pads_map != NULL) {
+				pad_reg = (volatile uint32_t *)
+				    ((uintptr_t)pads_map + 0x30);
+				*pad_reg &= ~0x80;
+				pmap_unmapdev(pads_map, 0x1000);
+			}
+		}
+
 		/* Initialize PWM channels */
 		for (int i = 0; i < BCM2712_PWM_NCHANNELS; i++) {
 			sc->channels[i].period = 41566;  /* ~24 kHz */
