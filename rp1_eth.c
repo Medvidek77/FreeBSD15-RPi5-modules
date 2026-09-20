@@ -388,7 +388,7 @@ cgem_setup_descs(struct rp1eth_softc *sc)
 	 * Descriptor DMA tag: 32-bit address space only.
 	 * RP1 PCIe2 inbound window maps BCM2712 DRAM at 32-bit addresses.
 	 */
-	err = bus_dma_tag_create(NULL, 1, 0,
+	err = bus_dma_tag_create(NULL, 4, 0,
 	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL,
 	    desc_rings_size, 1, desc_rings_size, 0,
 	    busdma_lock_mutex, &sc->sc_mtx, &sc->desc_dma_tag);
@@ -396,7 +396,7 @@ cgem_setup_descs(struct rp1eth_softc *sc)
 		return (err);
 
 	/* Mbuf DMA tag: same 32-bit constraint. */
-	err = bus_dma_tag_create(NULL, 1, 0,
+	err = bus_dma_tag_create(NULL, 4, 0,
 	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL,
 	    MCLBYTES, TX_MAX_DMA_SEGS, MCLBYTES, 0,
 	    busdma_lock_mutex, &sc->sc_mtx, &sc->mbuf_dma_tag);
@@ -632,6 +632,13 @@ cgem_clean_tx(struct rp1eth_softc *sc)
 		if ((ctl & CGEM_TXDESC_AHB_ERR) != 0) {
 			printf("rp1_eth: TX AHB error, addr=0x%08x\n",
 			    sc->txring[sc->txring_tl_ptr].addr);
+			/* clear error status and re-enable transmitter */
+			WR4(sc, CGEM_TX_STAT, CGEM_TX_STAT_HRESP_NOT_OK |
+			    CGEM_TX_STAT_CORRUPT_AHB_ERR);
+			sc->net_ctl_shadow |= CGEM_NET_CTRL_TX_EN;
+			WR4(sc, CGEM_NET_CTRL, sc->net_ctl_shadow |
+			    CGEM_NET_CTRL_START_TX);
+			WR4(sc, CGEM_USER_IO, 1);
 		} else if ((ctl & (CGEM_TXDESC_RETRY_ERR |
 		    CGEM_TXDESC_LATE_COLL)) != 0) {
 			if_inc_counter(sc->ifp, IFCOUNTER_OERRORS, 1);
@@ -692,6 +699,18 @@ cgem_start_locked(if_t ifp)
 		m = if_dequeue(ifp);
 		if (m == NULL)
 			break;
+
+		/* defrag unaligned or chained mbufs for 32-bit ahb burst */
+		if (((uintptr_t)m->m_data & 3) != 0 || m->m_next != NULL) {
+			struct mbuf *m2 = m_defrag(m, M_NOWAIT);
+			if (m2 == NULL) {
+				m_freem(m);
+				sc->txdefragfails++;
+				continue;
+			}
+			m = m2;
+			sc->txdefrags++;
+		}
 
 		if (bus_dmamap_create(sc->mbuf_dma_tag, 0,
 		    &sc->txring_m_dmamap[sc->txring_hd_ptr])) {
@@ -755,6 +774,7 @@ cgem_start_locked(if_t ifp)
 			sc->txring_hd_ptr += nsegs;
 		sc->txring_queued += nsegs;
 
+		atomic_thread_fence_rel();
 		WR4(sc, CGEM_NET_CTRL, sc->net_ctl_shadow |
 		    CGEM_NET_CTRL_START_TX);
 		/* GEM_GXL resets USER_IO on every NET_CTRL write. */
@@ -949,6 +969,7 @@ rp1eth_update_speed(sc);
 
 reschedule:
 	callout_reset(&sc->tick_ch, hz, rp1eth_tick, sc);
+callout_reset(&sc->gem_poll, MAX(1, hz / 200), cgem_gem_poll, sc);
 }
 
 /* -----------------------------------------------------------------------
@@ -1034,9 +1055,21 @@ cgem_intr_task(void *arg, int pending __unused)
 	cgem_clean_tx(sc);
 
 	if ((ist & CGEM_INTR_HRESP_NOT_OK) != 0) {
-		printf("rp1_eth: hresp not OK! rx_status=0x%x\n",
-		    RD4(sc, CGEM_RX_STAT));
-		WR4(sc, CGEM_RX_STAT, CGEM_RX_STAT_HRESP_NOT_OK);
+		uint32_t rxst = RD4(sc, CGEM_RX_STAT);
+		uint32_t txst = RD4(sc, CGEM_TX_STAT);
+
+		printf("rp1_eth: hresp not OK! rx_status=0x%x tx_status=0x%x\n",
+		    rxst, txst);
+		if ((rxst & CGEM_RX_STAT_HRESP_NOT_OK) != 0)
+			WR4(sc, CGEM_RX_STAT, CGEM_RX_STAT_HRESP_NOT_OK);
+		if ((txst & CGEM_TX_STAT_HRESP_NOT_OK) != 0) {
+			WR4(sc, CGEM_TX_STAT, CGEM_TX_STAT_HRESP_NOT_OK |
+			    CGEM_TX_STAT_CORRUPT_AHB_ERR);
+			sc->net_ctl_shadow |= CGEM_NET_CTRL_TX_EN;
+			WR4(sc, CGEM_NET_CTRL, sc->net_ctl_shadow |
+			    CGEM_NET_CTRL_START_TX);
+			WR4(sc, CGEM_USER_IO, 1);
+		}
 	}
 	if ((ist & CGEM_INTR_RX_OVERRUN) != 0) {
 		WR4(sc, CGEM_RX_STAT, CGEM_RX_STAT_OVERRUN);
@@ -1185,6 +1218,7 @@ cgem_init_locked(struct rp1eth_softc *sc)
 	if_setdrvflagbits(sc->ifp, IFF_DRV_RUNNING, IFF_DRV_OACTIVE);
 
 	callout_reset(&sc->tick_ch, hz, rp1eth_tick, sc);
+callout_reset(&sc->gem_poll, MAX(1, hz / 200), cgem_gem_poll, sc);
 }
 
 static void
