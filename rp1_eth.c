@@ -388,7 +388,7 @@ cgem_setup_descs(struct rp1eth_softc *sc)
 	 * Descriptor DMA tag: 32-bit address space only.
 	 * RP1 PCIe2 inbound window maps BCM2712 DRAM at 32-bit addresses.
 	 */
-	err = bus_dma_tag_create(NULL, 4, 0,
+	err = bus_dma_tag_create(NULL, 8, 0,
 	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL,
 	    desc_rings_size, 1, desc_rings_size, 0,
 	    busdma_lock_mutex, &sc->sc_mtx, &sc->desc_dma_tag);
@@ -630,6 +630,7 @@ cgem_clean_tx(struct rp1eth_softc *sc)
 		m_freem(m);
 
 		if ((ctl & CGEM_TXDESC_AHB_ERR) != 0) {
+			if_inc_counter(sc->ifp, IFCOUNTER_OERRORS, 1);
 			printf("rp1_eth: TX AHB error, addr=0x%08x\n",
 			    sc->txring[sc->txring_tl_ptr].addr);
 			/* clear error status and re-enable transmitter */
@@ -706,6 +707,7 @@ cgem_start_locked(if_t ifp)
 			if (m2 == NULL) {
 				m_freem(m);
 				sc->txdefragfails++;
+				if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 				continue;
 			}
 			m = m2;
@@ -725,6 +727,7 @@ cgem_start_locked(if_t ifp)
 			struct mbuf *m2 = m_defrag(m, M_NOWAIT);
 			if (m2 == NULL) {
 				sc->txdefragfails++;
+				if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 				m_freem(m);
 				bus_dmamap_destroy(sc->mbuf_dma_tag,
 				    sc->txring_m_dmamap[sc->txring_hd_ptr]);
@@ -1431,6 +1434,8 @@ rp1eth_add_sysctls(struct rp1eth_softc *sc, struct sysctl_oid *parent)
 	    &sc->txdmamapfails, 0, "Transmit DMA map failures");
 	SYSCTL_ADD_UINT(ctx, child, OID_AUTO, "_txdefrags", CTLFLAG_RD,
 	    &sc->txdefrags, 0, "Transmit m_defrag() calls");
+	SYSCTL_ADD_UINT(ctx, child, OID_AUTO, "_txdefragfails", CTLFLAG_RD,
+	    &sc->txdefragfails, 0, "Transmit m_defrag() failures");
 
 	tree = SYSCTL_ADD_NODE(ctx, child, OID_AUTO, "stats",
 	    CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, "GEM hardware statistics");
