@@ -561,9 +561,8 @@ bcm2712_modevent(module_t mod __unused, int event, void *arg __unused)
 		bcm2712_sc = NULL;
 
 		/* Stop periodic updates */
-		mtx_lock(&sc->thermal_mtx);
+		/* Drain callout outside mutex */
 		callout_drain(&sc->thermal_callout);
-		mtx_unlock(&sc->thermal_mtx);
 
 		/* Clean up sysctl tree */
 		sysctl_ctx_free(&sc->sysctl_ctx);
