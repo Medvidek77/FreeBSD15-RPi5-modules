@@ -24,7 +24,7 @@
 
 set -e
 
-BRANCH="${CYW43455_FW_BRANCH:-trixie}"
+BRANCH="${CYW43455_FW_BRANCH:-bookworm}"
 BASE_URL="${CYW43455_FW_URL:-https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/${BRANCH}/debian/config/brcm80211}"
 OUTDIR="${1:-.}"
 FETCH="${FETCH:-fetch -q}"
