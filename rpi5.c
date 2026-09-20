@@ -132,20 +132,22 @@ rpi5_update_fan_state(void)
 	temp = cooling_fan.cpu_temp;
 	new_state = cooling_fan.fan_current_state;
 
-	/* Thermal control logic with hysteresis */
-	if (temp >= cooling_fan.fan_temp3) {
+	/* Apply fan hysteresis */
+	if (temp >= cooling_fan.fan_temp3 ||
+	    (cooling_fan.fan_current_state >= 4 &&
+	    temp >= cooling_fan.fan_temp3 - cooling_fan.fan_temp3_hyst)) {
 		new_state = 4;  /* Max speed */
-	} else if (temp >= cooling_fan.fan_temp2 &&
-	           (cooling_fan.fan_prev_state < 3 ||
-	            temp >= (cooling_fan.fan_temp2 - cooling_fan.fan_temp2_hyst))) {
+	} else if (temp >= cooling_fan.fan_temp2 ||
+	    (cooling_fan.fan_current_state >= 3 &&
+	    temp >= cooling_fan.fan_temp2 - cooling_fan.fan_temp2_hyst)) {
 		new_state = 3;  /* High speed */
-	} else if (temp >= cooling_fan.fan_temp1 &&
-	           (cooling_fan.fan_prev_state < 2 ||
-	            temp >= (cooling_fan.fan_temp1 - cooling_fan.fan_temp1_hyst))) {
+	} else if (temp >= cooling_fan.fan_temp1 ||
+	    (cooling_fan.fan_current_state >= 2 &&
+	    temp >= cooling_fan.fan_temp1 - cooling_fan.fan_temp1_hyst)) {
 		new_state = 2;  /* Medium speed */
-	} else if (temp >= cooling_fan.fan_temp0 &&
-	           (cooling_fan.fan_prev_state == 0 ||
-	            temp >= (cooling_fan.fan_temp0 - cooling_fan.fan_temp0_hyst))) {
+	} else if (temp >= cooling_fan.fan_temp0 ||
+	    (cooling_fan.fan_current_state >= 1 &&
+	    temp >= cooling_fan.fan_temp0 - cooling_fan.fan_temp0_hyst)) {
 		new_state = 1;  /* Low speed */
 	} else {
 		new_state = 0;  /* Idle */
